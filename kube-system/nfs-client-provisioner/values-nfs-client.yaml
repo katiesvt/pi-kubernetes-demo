@@ -1,0 +1,10 @@
+nfs:
+  server: 10.0.1.2
+  path: /volume1/k3s
+  mountOptions:
+    - nfsvers=4.1
+storageClass:
+  archiveOnDelete: false
+
+image:
+  repository: quay.io/external_storage/nfs-client-provisioner-arm

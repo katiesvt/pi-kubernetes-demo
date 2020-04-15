@@ -1,0 +1,250 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pihole-custom-dnsmasq
+  labels:
+    app: pihole
+data:
+  02-custom.conf: |
+    address=/alexandria.local/10.0.1.2
+    address=/docker.local/10.0.1.5
+    address=/katiesvt.synology.me/10.0.1.2
+    address=/k3s.local/10.0.1.50
+    address=/tillicumnet.com/10.0.1.50
+    address=/pihole.local/10.0.1.98
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pihole-adlists
+  labels:
+    app: pihole
+data:
+  adlists.list: |
+    https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts
+    https://mirror1.malwaredomains.com/files/justdomains
+    http://sysctl.org/cameleon/hosts
+    https://s3.amazonaws.com/lists.disconnect.me/simple_tracking.txt
+    https://s3.amazonaws.com/lists.disconnect.me/simple_ad.txt
+    https://hosts-file.net/ad_servers.txt
+    https://dbl.oisd.nl/
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pihole-blacklist
+  labels:
+    app: pihole
+data:
+  blacklist.txt: |
+    diagnostics.meethue.com
+    getpocket.com
+    client-event-reporter.twitch.tv
+    events.gfe.nvidia.com
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pihole-regex
+  labels:
+    app: pihole
+data:
+  regex.list: |
+    ^(.+[_.-])?ad[sxv]?[0-9]*[_.-]
+    ^(.+[_.-])?adse?rv(er?|ice)?s?[0-9]*[_.-]
+    ^(.+[_.-])?telemetry[_.-]
+    ^(www[0-9]*\.)?xn--
+    ^adim(age|g)s?[0-9]*[_.-]
+    ^adtrack(er|ing)?[0-9]*[_.-]
+    ^advert(s|is(ing|ements?))?[0-9]*[_.-]
+    ^aff(iliat(es?|ion))?[_.-]
+    ^analytics?[_.-]
+    ^banners?[_.-]
+    ^beacons?[0-9]*[_.-]
+    ^count(ers?)?[0-9]*[_.-]
+    ^mads\.
+    ^pixels?[-.]
+    ^stat(s|istics)?[0-9]*[_.-]
+    ^track(ers?|ing)?[0-9]*[_.-]
+    ^.*\.?gfe\.nvidia\.com
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pihole-whitelist
+  labels:
+    app: pihole
+data:
+  whitelist.txt: |
+    cdn.mcauto-images-production.sendgrid.net
+    tracking.intelcomexpress.com
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pihole-tcp
+  labels:
+    app: pihole
+  annotations:
+    metallb.universe.tf/allow-shared-ip: pihole-svc
+spec:
+  type: LoadBalancer
+  selector:
+    app: pihole
+  loadBalancerIP: 10.0.1.98
+  externalTrafficPolicy: Local
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+    - port: 443
+      targetPort: https
+      protocol: TCP
+      name: https
+    - port: 53
+      targetPort: dns
+      protocol: TCP
+      name: dns
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pihole-udp
+  labels:
+    app: pihole
+  annotations:
+    metallb.universe.tf/allow-shared-ip: pihole-svc
+spec:
+  type: LoadBalancer
+  selector:
+    app: pihole
+  loadBalancerIP: 10.0.1.98
+  externalTrafficPolicy: Local
+  ports:
+    - port: 53
+      protocol: UDP
+      name: dns-udp
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pihole
+  labels:
+    app: pihole
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: pihole
+  template:
+    metadata:
+      labels:
+        app: pihole
+    spec:
+      dnsPolicy: "None"
+      dnsConfig:
+        nameservers:
+          - 127.0.0.1
+          - 10.0.1.1
+      containers:
+        - name: pihole
+          env:
+            - name: WEB_PORT
+              value: "80"
+            - name: WEBPASSWORD
+              value: password
+            - name: TZ
+              value: America/Vancouver
+            - name: DNS1
+              value: "10.0.1.1"
+            - name: DNS2
+              value: "10.0.1.1"
+            - name: CONDITIONAL_FORWARDING
+              value: "true"
+            - name: CONDITIONAL_FORWARDING_IP
+              value: "10.0.1.1"
+            - name: CONDITIONAL_FORWARDING_DOMAIN
+              value: "local"
+          image: pihole/pihole:latest
+          ports:
+            - containerPort: 80
+              name: http
+              protocol: TCP
+            - containerPort: 53
+              name: dns
+              protocol: TCP
+            - containerPort: 53
+              name: dns-udp
+              protocol: UDP
+            - containerPort: 443
+              name: https
+              protocol: TCP
+            - containerPort: 67
+              name: client-udp
+              protocol: UDP
+          livenessProbe:
+            httpGet:
+              path: /admin.index.php
+              port: http
+            initialDelaySeconds: 60
+            failureThreshold: 10
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /admin.index.php
+              port: http
+            initialDelaySeconds: 60
+            failureThreshold: 3
+            timeoutSeconds: 5
+          volumeMounts:
+            - mountPath: /etc/pihole
+              name: config
+            - mountPath: /etc/dnsmasq.d/02-custom.conf
+              name: custom-dnsmasq
+              subPath: 02-custom.conf
+            - mountPath: /etc/pihole/adlists.list
+              name: adlists
+              subPath: adlists.list
+            - mountPath: /etc/pihole/blacklist.txt
+              name: blacklist
+              subPath: blacklist.txt
+            - mountPath: /etc/pihole/regex.list
+              name: regex
+              subPath: regex.list
+            - mountPath: /etc/pihole/whitelist.txt
+              name: whitelist
+              subPath: whitelist.txt
+      volumes:
+        - name: config
+          emptyDir: {}
+        - name: custom-dnsmasq
+          configMap:
+            defaultMode: 420
+            name: pihole-custom-dnsmasq
+        - name: adlists
+          configMap:
+            defaultMode: 420
+            name: pihole-adlists
+        - name: whitelist
+          configMap:
+            defaultMode: 420
+            name: pihole-whitelist
+        - name: blacklist
+          configMap:
+            defaultMode: 420
+            name: pihole-blacklist
+        - name: regex
+          configMap:
+            defaultMode: 420
+            name: pihole-regex

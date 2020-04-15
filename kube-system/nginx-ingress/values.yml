@@ -1,0 +1,29 @@
+## nginx configuration
+## Ref: https://github.com/kubernetes/ingress/blob/master/controllers/nginx/configuration.md
+##
+controller:
+  name: controller
+  image:
+    repository: quay.io/kubernetes-ingress-controller/nginx-ingress-controller-arm
+    tag: "0.30.0"
+    runAsUser: 101
+    allowPrivilegeEscalation: true
+  extraArgs:
+    default-ssl-certificate: "kube-system/tillicumnet-com"
+  replicaCount: 1
+  service:
+    enabled: true
+    loadBalancerIP: "10.0.1.50"
+  ports:
+    http: 80
+    https: 443
+    ssh: 22
+  targetPorts:
+    http: http
+    https: https
+    ssh: ssh
+defaultBackend:
+  enabled: false
+
+tcp:
+  22: "gitea/gitea:22"

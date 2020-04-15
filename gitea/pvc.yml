@@ -1,0 +1,27 @@
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: postgresql
+  labels:
+    app: postgresql
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 50Gi
+  storageClassName: nfs-client
+---
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: gitea-data
+  labels:
+    app: gitea
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 50Gi
+  storageClassName: nfs-client
