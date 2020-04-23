@@ -1,0 +1,100 @@
+# Wrote a custom (simple) deployment to support ARM as stable/mongo doesn't
+# Don't increase the number of replicas
+kind: StatefulSet
+apiVersion: apps/v1
+metadata:
+  name: mongo
+  labels:
+    app: mongo
+spec:
+  replicas: 2
+  serviceName: mongo
+  selector:
+    matchLabels:
+      app: mongo
+  template:
+    metadata:
+      labels:
+        app: mongo
+    spec:
+      nodeSelector:
+        beta.kubernetes.io/arch: arm64
+      securityContext:
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+      terminationGracePeriodSeconds: 10
+      containers:
+        - name: mongo
+          image: mongo:4
+          resources:
+            limits:
+              memory: "256Mi"
+            requests:
+              memory: "256Mi"
+          command:
+            - mongod
+            - --oplogSize
+            - "128"
+            - --replSet
+            - rs0
+            - --bind_ip_all
+          ports:
+            - containerPort: 27017
+              name: mongo
+          livenessProbe:
+            exec:
+              command:
+                - pgrep
+                - mongod
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 6
+          readinessProbe:
+            exec:
+              command:
+                - mongo
+                - --eval
+                - "db.adminCommand('ping')"
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 6
+          volumeMounts:
+            - name: mongo-data
+              mountPath: /data/db
+              subPath: db
+            - name: mongo-data
+              mountPath: /data/configdb
+              subPath: configdb
+  volumeClaimTemplates:
+    - metadata:
+        name: mongo-data
+      spec:
+        storageClassName: "nfs-client"
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 100Gi
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: mongo
+  annotations:
+    service.alpha.kubernetes.io/tolerate-unready-endpoints: "true"
+  labels:
+    app: mongo
+spec:
+  type: ClusterIP
+  clusterIP: None
+  selector:
+    app: mongo
+  publishNotReadyAddresses: true
+  ports:
+    - name: mongo
+      port: 27017
+      targetPort: 27017

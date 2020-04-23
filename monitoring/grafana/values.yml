@@ -1,5 +1,0 @@
-sidecar:
-  datasources:
-    enabled: true
-    label: grafana_datasource
-  image: docker.tillicumnet.com/grafana-k8s-sidecar:latest

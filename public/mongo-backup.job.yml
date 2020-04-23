@@ -1,0 +1,29 @@
+apiVersion: batch/v1beta1
+kind: CronJob
+metadata:
+  name: mongo-backup
+  labels:
+    app: mongo-backup
+spec:
+  schedule: "0 2 * * *"
+  jobTemplate:
+    spec:
+      backoffLimit: 5
+      activeDeadlineSeconds: 100
+      template:
+        spec:
+          containers:
+            - name: mongo-backup
+              image: mongo:4
+              command:
+                - sh
+                - -c
+                - mongodump --host mongo-0.mongo.public --gzip --archive="dump/$(date +'%Y%m%d')" --oplog
+              volumeMounts:
+                - mountPath: dump
+                  name: mongo-backup
+          volumes:
+            - name: mongo-backup
+              persistentVolumeClaim:
+                claimName: mongo-backup
+          restartPolicy: OnFailure
